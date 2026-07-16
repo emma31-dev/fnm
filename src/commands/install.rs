@@ -81,9 +81,6 @@ impl Command for Install {
 
         let version = match current_version.clone() {
             UserVersion::Full(Version::Semver(actual_version)) => Version::Semver(actual_version),
-            UserVersion::Full(v @ (Version::Bypassed | Version::Alias(_))) => {
-                return Err(Error::UninstallableVersion { version: v });
-            }
             UserVersion::Full(Version::Lts(lts_type)) => {
                 let available_versions: Vec<_> = remote_node_index::list(&config.node_dist_mirror)
                     .map_err(|source| Error::CantListRemoteVersions { source })?;
@@ -116,7 +113,10 @@ impl Command for Install {
                 );
                 picked_version
             }
-            current_version => {
+            UserVersion::Full(v) => {
+                return Err(Error::UninstallableVersion { version: v });
+            }
+            _ => {
                 let available_versions: Vec<_> = remote_node_index::list(&config.node_dist_mirror)
                     .map_err(|source| Error::CantListRemoteVersions { source })?
                     .drain(..)
@@ -126,7 +126,7 @@ impl Command for Install {
                 current_version
                     .to_version(&available_versions, config)
                     .ok_or(Error::CantFindNodeVersion {
-                        requested_version: current_version,
+                        requested_version: current_version.clone(),
                     })?
                     .clone()
             }
@@ -155,7 +155,7 @@ impl Command for Install {
                 outln!(config, Error, "{} {}", "warning:".bold().yellow(), err);
             }
             Err(source) => Err(Error::DownloadError { source })?,
-            Ok(()) => {}
+            Ok(_) => {}
         }
 
         if !config.default_version_dir().exists() {
@@ -319,5 +319,31 @@ mod tests {
             .canonicalize()
             .unwrap()
             .exists());
+    }
+
+    #[test]
+    fn test_use_installed_version() -> Result<(), Error> {
+        let base_dir = tempfile::tempdir()?;
+        let config = FnmConfig::default().with_base_dir(Some(base_dir.path().to_path_buf()));
+        let available_versions: Vec<_> = remote_node_index::list(&config.node_dist_mirror)
+            .map_err(|source| Error::CantListRemoteVersions { source })?
+            .drain(..)
+            .map(|x| x.version)
+            .collect();
+        let current_version = Install::default()
+            .version()?
+            .or_else(|| get_user_version_for_directory(base_dir, &config))
+            .ok_or(Error::CantInferVersion)?;
+
+        let version = current_version
+            .to_version(&available_versions, &config)
+            .ok_or(Error::CantFindNodeVersion {
+                requested_version: current_version.clone(),
+            })?
+            .clone();
+
+        use_installed_version(&version, &config)?;
+
+        Ok(())
     }
 }

@@ -59,13 +59,13 @@ impl Version {
     pub fn installation_path(&self, config: &config::FnmConfig) -> std::path::PathBuf {
         match self {
             Self::Bypassed => system_version::path(),
-            v @ (Self::Lts(_) | Self::Alias(_) | Self::Latest) => {
-                config.aliases_dir().join(v.alias_name().unwrap())
-            }
             v @ Self::Semver(_) => config
                 .installations_dir()
                 .join(v.v_str())
                 .join("installation"),
+            v => {
+                config.aliases_dir().join(v.alias_name().unwrap())
+            }
         }
     }
 

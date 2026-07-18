@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use super::command::Command;
 use super::r#use::Use;
 use crate::alias::create_alias;
@@ -144,19 +146,22 @@ impl Command for Install {
             safe_arch.as_str()
         );
 
-        match install_node_dist(
+        install_node_dist(
             &version,
             &config.node_dist_mirror,
             config.installations_dir(),
             safe_arch,
             show_progress,
-        ) {
-            Err(err @ DownloaderError::VersionAlreadyInstalled { .. }) => {
-                outln!(config, Error, "{} {}", "warning:".bold().yellow(), err);
+        )
+        .map_err(|error| {
+            match &error {
+                source @ DownloaderError::VersionAlreadyInstalled { .. } => {
+                    outln!(config, Error, "{} {}", "warning:".bold().yellow(), source);
+                },
+                _ => {},
             }
-            Err(source) => Err(Error::DownloadError { source })?,
-            Ok(_) => {}
-        }
+            Error::DownloadError { source: error }
+        })?;
 
         if !config.default_version_dir().exists() {
             debug!("Tagging {} as the default version", version.v_str().cyan());

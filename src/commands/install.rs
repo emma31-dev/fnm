@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use super::command::Command;
 use super::r#use::Use;
 use crate::alias::create_alias;
